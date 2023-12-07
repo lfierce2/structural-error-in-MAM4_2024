@@ -1,5 +1,5 @@
-# Processing code for box model evaluation of MAM4
-Python code used for scenario generation, data process, and analysis, and visualization for Fierce et al. (2024), Constraining black carbon aging in global models to reflect timescales for internal mixing, JAMES (under review).
+# Processing code for "Quantifying structural errors in cloud condensation nuclei activity from reduced representation of aerosol size distributions"
+Python code used for scenario generation, data process, and analysis, and visualization for Fierce et al. (2024), Quantifying structural errors in cloud condensation nuclei activity from reduced representation of aerosol size distributions, Journal of Aerosol Science (under review).
 
 This package contains Python code to:
   * Create and run ensembles of simulations with the PartMC-MOSAIC and MAM4 box models

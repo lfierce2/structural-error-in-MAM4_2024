@@ -17,6 +17,7 @@ import os
 import random
 import seaborn as sns
 from sklearn.neighbors import KernelDensity
+from string import ascii_lowercase
 
 def make_input_table(
         ensemble_dir,
@@ -62,6 +63,31 @@ def make_input_table(
         varvals[vv,:] = varvals[vv,:]*varmultipliers[vv]
     
     table_lines = make_LaTex_table(varvals,vartypes,varlabs,collabs)
+    return table_lines
+
+def make_scenario_table(
+       ensemble_dir,scenario_nums,timestep,
+       varnames = ['KL_backward','s_onset_partmc_01','s_onset_mam4_01','s_onset_partmc_50','s_onset_mam4_50','s_onset_partmc_99','s_onset_mam4_99'],
+       vartypes = ['float','float','float','float','float','float','float'],
+       collabs = ['scenario label','KL-divergence','$s_{\mathrm{1,MAM4}}','$s_{\mathrm{1,PartMC-MOSAIC}}','$s_{\mathrm{50,MAM4}}','$s_{\mathrm{50,PartMC-MOSAIC}}','$s_{\mathrm{99,MAM4}}','$s_{\mathrm{99,PartMC-MOSAIC}}']):
+    
+    varvals = np.zeros([len(scenario_nums),len(varnames)])
+    scenario_labs = []
+    for ss,scenario_num in enumerate(scenario_nums):
+        scenario_labs.append(ascii_lowercase[ss])
+        tt_dir = ensemble_dir + 'processed_output/tt' + str(7).zfill(4) + '/'
+        for vv,varname in enumerate(varnames):
+            if varname.startswith('s_onset'):
+                idx_str = varname.rfind('_', 0,-1)
+                varname_prefix = varname[:idx_str]
+                thresh = float(varname[(idx_str+1):])/100.
+                vardat_all_scenarios = analyses.read_boxmodel_data(varname_prefix,tt_dir,0.,recompute_KL=True,thresh=thresh)
+            else:
+                vardat_all_scenarios = analyses.read_boxmodel_data(varname,tt_dir,0.,recompute_KL=True,thresh=0.)
+            varvals[ss,vv] = vardat_all_scenarios[scenario_num]
+    
+    table_lines = make_LaTex_table(varvals,vartypes,scenario_labs,collabs)
+    
     return table_lines
 
 def make_input_table_CIs(
@@ -228,12 +254,6 @@ def make_LaTex_table_CIs(varvals,vartypes,varlabs,collabs):
                     onerow += '('
                 if varlab.startswith('geom.'):
                     onerow += str(np.round(varvals[rr,cc-1],3))
-                    # exponential_val = int(np.floor(np.log10(varvals[rr,cc-1])))
-                    # lead_val = np.round(varvals[rr,cc-1]/10.**exponential_val,2)
-                    # print(lead_val)
-                    # if lead_val == np.round(varvals[rr,cc-1]/10.**exponential_val,0):
-                    #     lead_val = int(lead_val)
-                    # onerow += str(lead_val) + '$\\times$10$^' + str(exponential_val) + '$'
                 elif vartype == 'float':
                     onerow += str(np.round(varvals[rr,cc-1],2))
                 elif vartype == 'exp':
@@ -256,17 +276,6 @@ def make_LaTex_table_CIs(varvals,vartypes,varlabs,collabs):
     table_lines += ['\\end{tabular}']
     table_lines += ['\\end{center}']
     return table_lines
-    # for ii,Xvarname in enumerate(Xvarnames):
-    #     X_e3sm_raveled,the_shape = analyses.get_X_e3sm([Xvar_prefix + '_' + str(mode)],f,tt=0,lev=-1,return_shape=True)
-# def inputs_from_e3sm(
-#         e3sm_filename='/Users/fier887/Downloads/E3SM_output_for_PartMC_0607_surf.nc',
-#         Xvarnames = [
-#             'N0_1','N0_2','N0_3','N0_4',
-#             'mu0_1','mu0_2','mu0_3','mu0_4']):
-    
-#     for ii,Xvarname in enumerate(Xvarnames):
-#         X_e3sm_raveled,the_shape = analyses.get_X_e3sm(Xvarname,f,tt=0,lev=-1,return_shape=True)
-        
         
 def input_pdfs(
         e3sm_filename='/Users/fier887/Downloads/E3SM_output_for_PartMC_0607_surf.nc',
@@ -279,11 +288,6 @@ def input_pdfs(
     fig,axs = plt.subplots(1,2)
     df_list = []
     for ii,(Xvar_prefix,scl) in enumerate(zip(Xvar_prefixes,scls)):
-        # fig,axs = plt.subplots(1,len(modes),sharey=True)
-        # Xdat = np.array([])
-        # mode_vals = np.array([])
-        
-        # ylim_max = 0.
         for jj,(mode,col) in enumerate(zip(modes,mode_cols)):
             X_e3sm_raveled,the_shape = analyses.get_X_e3sm([Xvar_prefix + '_' + str(mode)],f,tt=0,lev=-1,return_shape=True)
             if scl == 'log':
@@ -296,32 +300,14 @@ def input_pdfs(
                 kde = KernelDensity(bandwidth=(bin_edges[1]-bin_edges[0])*1.5).fit(X_e3sm_raveled)
             
             axs[ii].plot(10.**bin_edges,np.exp(kde.score_samples(bin_edges.reshape(-1,1))));
-        
-        # if scl == 'log':
+            
         axs[ii].set_xscale('log')
-            
-            # if mode == 1:
-            #     Xdat = X_e3sm_raveled[:,0]
-            #     mode_vals = mode*np.ones_like(X_e3sm_raveled[:,0])
-            # else:
-            #     Xdat = np.hstack([Xdat,X_e3sm_raveled[:,0]])
-            #     mode_vals = np.hstack([mode_vals,mode*np.ones_like(X_e3sm_raveled[:,0])])            
-            
-            # if Xvar_prefixes == 'mu0':
-            #     bin_edges,hist_vals = np.histogram(10.**(X_e3sm_raveled),bins=bin_vals)
-            # else:
-            #     bin_edges,hist_vals = np.histogram(X_e3sm_raveled,bins=bin_vals)
-            
-            # ylim_max = max([ylim_max,axs[jj].get_ylim()[-1]])
-            # axs[jj].plot(bin_vals,hist_vals);
-            # axs[jj].set_xscale('log')
-                
+        
     fig.set_size_inches(fig_width,fig_height)
     
 def input_pdfs_old(
         e3sm_filename='/Users/fier887/Downloads/E3SM_output_for_PartMC_0607_surf.nc',
         Xvar_prefixes = ['N0','mu0'], bins = [np.logspace(5,12,200),np.logspace(-9,-4,300)], modes = range(1,5), showfliers=False,
-        # Xvarnames_plot = [['N0_1','N0_2','N0_3','N0_4','mu0_1','mu0_2','mu0_3','mu0_4']],
         fig_width = 6.5, fig_height = 1.5):
     
     f = Dataset(e3sm_filename)
@@ -424,21 +410,9 @@ def box_model_fccn__all_scenarios(
     ensemble_settings = pickle.load(open(ensemble_dir + 'ensemble_settings.pkl','rb'))
     n_repeat = ensemble_settings[0]['spec']['n_repeat']
     
-    # all_frac_ccn_partmc_mean = np.zeros([len(timesteps),len(ensemble_settings),151])
-    # all_frac_ccn_partmc_std = np.zeros([len(timesteps),len(ensemble_settings),151])
-    # all_frac_ccn_mam4 = np.zeros([len(timesteps),len(ensemble_settings),151])
-    
     for tt,timestep in enumerate(timesteps):
         tt_dir = ensemble_dir + 'processed_output/tt' + str(timestep).zfill(4) + '/'
         s_env_vals, frac_ccn_partmc_mean, frac_ccn_partmc_std, frac_ccn_mam4 =  analyses.read_frac_ccn(tt_dir,n_repeat)
-        # plt.plot(s_env_vals,frac_ccn_partmc_mean.transpose()); plt.xscale('log')
-        # plt.show()
-        # plt.plot(s_env_vals,frac_ccn_mam4.transpose()); plt.xscale('log')
-        # plt.show()
-        
-        # all_frac_ccn_partmc_mean[tt,:,:] = frac_ccn_partmc_mean
-        # all_frac_ccn_partmc_std[tt,:,:] = frac_ccn_partmc_std
-        # all_frac_ccn_mam4[tt,:,:] = frac_ccn_mam4
         
         all_frac_ccn_partmc_mean.append(frac_ccn_partmc_mean)
         all_frac_ccn_partmc_std.append(frac_ccn_partmc_std)
@@ -452,14 +426,13 @@ def box_model_fccn__all_scenarios(
             frac_ccn_partmc_mean = all_frac_ccn_partmc_mean[tt][jj,:]
             frac_ccn_partmc_std = all_frac_ccn_partmc_std[tt][jj,:]
             frac_ccn_mam4 = all_frac_ccn_mam4[tt][jj,:]
-            # axs[tt].errorbar(s_env_vals,frac_ccn_partmc_mean,yerr=frac_ccn_partmc_std)
             axs[tt].plot(s_env_vals,all_frac_ccn_partmc_mean[tt][jj,:])
             axs[tt].plot(s_env_vals,all_frac_ccn_mam4[tt][jj,:])
             KL = np.mean(all_KL_repeats[tt][jj,:],axis=0)
             axs[tt].set_xscale('log')
             axs[tt].set_xlim([1e-3,1e2])
             axs[tt].set_title('t = ' + str(timesteps[tt]*dtime) + '\n KL = ' + str(np.round(KL,2)))
-        # plt.show()
+        
         if save_fig:
             save_dir = get_save_dir(ensemble_dir)
             if not os.path.exists(save_dir):
@@ -553,19 +526,16 @@ def box_model_dsds__regimes(
 
     if add_text:
         for kk,jj in enumerate(scenario_nums):#range(all_dNdlnD_partmc[0].shape[0]):
-            # h2so40 = np.round(ensemble_settings[jj]['gas_init']['H2SO4'],1)
             for tt,timestep in enumerate(timesteps):
                 KL = np.mean(all_KL_repeats[tt][jj,:],axis=0)
                 ylims = axs[kk,tt].get_ylim()
                 xlims = axs[kk,tt].get_xlim()
                 axs[kk,tt].text(1.8*xlims[0],ylims[1]*0.8,'KL = ' + str(np.round(KL,1)))
                 
-            # axs[kk,tt].set_title('KL = ' + str(np.round(KL,2)))
     if save_fig:
         save_dir = get_save_dir(ensemble_dir)
         fig.savefig(save_dir + 'dsd_regimes.pdf',dpi=dpi,bbox_inches='tight')
         
-    # fig.savefig('dsds.pdf',dpi=dpi)
     plt.show()
     return scenario_nums
     
@@ -651,20 +621,17 @@ def box_model_dsds__regimes(
                     axs[kk,tt].set_yticklabels('')
 
     if add_text:
-        for kk,jj in enumerate(scenario_nums):#range(all_dNdlnD_partmc[0].shape[0]):
-            # h2so40 = np.round(ensemble_settings[jj]['gas_init']['H2SO4'],1)
+        for kk,jj in enumerate(scenario_nums):
             for tt,timestep in enumerate(timesteps):
                 KL = np.mean(all_KL_repeats[tt][jj,:],axis=0)
                 ylims = axs[kk,tt].get_ylim()
                 xlims = axs[kk,tt].get_xlim()
                 axs[kk,tt].text(1.8*xlims[0],ylims[1]*0.8,'KL = ' + str(np.round(KL,1)))
                 
-            # axs[kk,tt].set_title('KL = ' + str(np.round(KL,2)))
     if save_fig:
         save_dir = get_save_dir(ensemble_dir)
         fig.savefig(save_dir + 'dsd_regimes.pdf',dpi=dpi,bbox_inches='tight')
         
-    # fig.savefig('dsds.pdf',dpi=dpi)
     plt.show()
     return scenario_nums
 
@@ -672,7 +639,7 @@ def box_model_dsds__few(
         ensemble_dir,timesteps,scenario_nums,units='min',sharey=True,
         lnDs = np.log(np.logspace(-10,-5,100)),backward=False,save_fig=True,
         fig_width=7.5,fig_height = 5.,
-        dpi=500,normalize=True,add_text=False):
+        dpi=500,normalize=True,add_text=False,add_lab=True,left=False):
     ensemble_settings = pickle.load(open(ensemble_dir + 'ensemble_settings.pkl','rb'))
     dtime = ensemble_settings[0]['spec']['t_output']
     n_repeat = ensemble_settings[0]['spec']['n_repeat']
@@ -690,17 +657,12 @@ def box_model_dsds__few(
         all_dNdlnD_mam4.append(dNdlnD_mam4)
         all_KL_repeats.append(KL_repeats)
     ensemble_settings = pickle.load(open(ensemble_dir + 'ensemble_settings.pkl','rb'))
-    # fig,axs = plt.subplots(
-    #     nrows=len(scenario_nums),ncols=len(timesteps)+1,
-    #     figsize=figsize,sharey=sharey,sharex=True)
-
+    
     fig,axs = plt.subplots(
         nrows=len(scenario_nums)+1,ncols=len(timesteps),
         figsize=figsize,sharey=sharey,sharex=True)    
-    # xlim_vals = []
-    for kk,jj in enumerate(scenario_nums):#range(all_dNdlnD_partmc[0].shape[0]):
+    for kk,jj in enumerate(scenario_nums):
         ylim_max = 0.
-        # h2so40 = np.round(ensemble_settings[jj]['gas_init']['H2SO4'],1)
         for tt,timestep in enumerate(timesteps):
             if not normalize:
                 dNdlnD_partmc_mean = np.mean(all_dNdlnD_partmc[tt][jj,:,:],axis=1)
@@ -714,7 +676,6 @@ def box_model_dsds__few(
                 dNdlnD_partmc_std = np.std(dndlnD_partmc,axis=1)
                 dNdlnD_mam4 = all_dNdlnD_mam4[tt][jj,:]/(np.sum(all_dNdlnD_mam4[tt][jj,:])*dlnD)
             
-            # axs[kk,tt].errorbar(1e6*np.exp(lnDs),dNdlnD_partmc_mean,yerr=dNdlnD_partmc_std,color='k',linewidth=2.,linestyle='--')
             axs[kk+1,tt].plot(1e6*np.exp(lnDs),dNdlnD_partmc_mean,color='k',linewidth=2.,linestyle='--',label='PartMC-MOSAIC')
             axs[kk+1,tt].plot(1e6*np.exp(lnDs),dNdlnD_mam4,color='C0',linewidth=2.,label='MAM4')
             KL = np.mean(all_KL_repeats[tt][jj,:],axis=0)
@@ -726,7 +687,6 @@ def box_model_dsds__few(
                     axs[kk+1,tt].set_title(str(int(timestep*dtime/3600.)) + ' h',fontdict={'size':12})
                 elif units == 'min':
                     axs[kk+1,tt].set_title(str(int(timestep*dtime/60.)) + ' min',fontdict={'size':12})
-                # axs[kk,tt].set_title(str(int(timestep*dtime/3600.)) + ' h')
             if kk == len(scenario_nums)-1 and tt == int((len(timesteps)-1)/2):#tt == 1 and kk == len(scenario_nums)-1:
                 if int((len(timesteps)-1)/2) == tt:
                     axs[kk+1,tt].set_xlabel('dry diameter [$\mu$m]',fontdict={'size':12})
@@ -739,16 +699,14 @@ def box_model_dsds__few(
                     axs[kk+1,tt].set_ylabel('dN/dlnD [m$^{-3}$]',fontdict={'size':14})
             
             ylim_max = max(np.hstack([ylim_max,axs[kk,tt].get_ylim()]))
-        # fig.supxlabel('dry diameter [$\mu$m]',fontdict={'size':12})
-            # axs[kk,tt].set_xlim(xlim_vals)
+            
         if not sharey:
             for tt in range(axs.shape[1]):
                 axs[kk+1,tt].set_ylim([0.,ylim_max])
                 if tt>0.:
                     axs[kk+1,tt].set_yticklabels('')
     if add_text:
-        for kk,jj in enumerate(scenario_nums):#range(all_dNdlnD_partmc[0].shape[0]):
-            # h2so40 = np.round(ensemble_settings[jj]['gas_init']['H2SO4'],1)
+        for kk,jj in enumerate(scenario_nums):
             for tt,timestep in enumerate(timesteps):
                 KL = np.mean(all_KL_repeats[tt][jj,:],axis=0)
                 ylims = axs[kk,tt].get_ylim()
@@ -757,15 +715,12 @@ def box_model_dsds__few(
     tt = 0;
     hln1 = axs[kk,tt].plot(1e6*np.exp(lnDs),dNdlnD_partmc_mean,color='k',linewidth=2.,linestyle='--',label='PartMC-MOSAIC')
     hln2 = axs[kk,tt].plot(1e6*np.exp(lnDs),dNdlnD_mam4,color='C0',linewidth=2.,label='MAM4')
-    # axs[kk,tt].set_xlim([100.,1000.])
+    
     
     axs[kk,tt].legend(loc='lower left',frameon=False,bbox_to_anchor=(axs[kk,tt].get_xlim()[0],0.4*axs[kk,tt].get_ylim()[1]),ncol=2)
     hln1[0].remove()
     hln2[0].remove()
-    # axs[kk,tt].legend(loc='lower left',bbox_to_anchor=(axs[kk,tt].get_xlim()[-1]*2.,axs[kk,tt].get_ylim()[-1]*0.3),frameon=False)
-    # for ii in range(axs.shape[0]):
-    #     axs[ii,-1].axis('off')
-    #     axs[ii,-1].axis('off')
+    
     for ii in range(axs.shape[1]):
         axs[0,ii].axis('off')
         axs[0,ii].axis('off')
@@ -774,19 +729,34 @@ def box_model_dsds__few(
         if kk>0:
             axs[kk,0].set_yticks([0.,0.5])
     
+    if add_lab:
+        for kk in range(axs.shape[0]):
+            if kk>0:
+                if left:
+                    xlim_vals = axs[kk,0].get_xlim()
+                    ylim_vals = axs[kk,0].get_ylim()
+                    x_text = 10.**(np.log10(xlim_vals[0])-0.3*(np.log10(xlim_vals[-1])-np.log10(xlim_vals[0])))
+                    y_text = (ylim_vals[1] - ylim_vals[0])*0.85 + ylim_vals[0]
+                    axs[kk,0].text(x_text,y_text,'(' + ascii_lowercase[kk-1] + ')')
+                else:
+                    xlim_vals = axs[kk,-1].get_xlim()
+                    ylim_vals = axs[kk,-1].get_ylim()
+                    x_text = 10.**(np.log10(xlim_vals[-1])+0.1*(np.log10(xlim_vals[-1])-np.log10(xlim_vals[0])))
+                    y_text = (ylim_vals[1] - ylim_vals[0])*0.85 + ylim_vals[0]
+                    axs[kk,-1].text(x_text,y_text,'(' + ascii_lowercase[kk-1] + ')')
+
+    
     if save_fig:
         save_dir = get_save_dir(ensemble_dir)
         fig.savefig(save_dir + 'dsd_few.pdf',dpi=dpi,bbox_inches='tight')
         
-            # axs[kk,tt].set_title('KL = ' + str(np.round(KL,2)))
-    # fig.savefig('dsds.pdf',dpi=dpi)
     plt.show()
 
 def box_model_fccn__few(
         ensemble_dir,timesteps,scenario_nums,units='min',sharey=True,
         backward=True,save_fig=True,
         fig_width=7.5,fig_height = 5.,
-        dpi=500,add_text=False):
+        dpi=500,add_text=False,add_lab=True,left=False):
     
     ensemble_settings = pickle.load(open(ensemble_dir + 'ensemble_settings.pkl','rb'))
     dtime = ensemble_settings[0]['spec']['t_output']
@@ -814,16 +784,15 @@ def box_model_fccn__few(
         nrows=len(scenario_nums)+1,ncols=len(timesteps),
         figsize=figsize,sharey=sharey,sharex=True)
     
-    for kk,jj in enumerate(scenario_nums):#range(all_dNdlnD_partmc[0].shape[0]):
+    for kk,jj in enumerate(scenario_nums):
         for tt,timestep in enumerate(timesteps):
-            frac_ccn_partmc_mean = all_frac_ccn_partmc_mean[tt][jj,:] #np.mean(all_dNdlnD_partmc[tt][jj,:,:],axis=1)
-            frac_ccn_partmc_std = all_frac_ccn_partmc_std[tt][jj,:] #np.std(all_dNdlnD_partmc[tt][jj,:,:],axis=1)
+            frac_ccn_partmc_mean = all_frac_ccn_partmc_mean[tt][jj,:]
+            frac_ccn_partmc_std = all_frac_ccn_partmc_std[tt][jj,:]
             frac_ccn_mam4 = all_frac_ccn_mam4[tt][jj,:]
             
             axs[kk+1,tt].plot(s_env_vals,frac_ccn_partmc_mean,color='k',linewidth=2.,linestyle='--',label='PartMC-MOSAIC')
             axs[kk+1,tt].plot(s_env_vals,frac_ccn_mam4,color='C0',linewidth=2.,label='MAM4')
             axs[kk+1,tt].set_xscale('log')
-            #axs[kk,tt].set_xlim([min(s_env_vals),max(s_env_vals)])
             axs[kk+1,tt].set_xlim([0.2e-1,50.])
             if kk == 0:
                 if units == 'h':
@@ -842,23 +811,14 @@ def box_model_fccn__few(
             
             axs[kk+1,tt].set_yticklabels('')
     
-    # kk = 0
-    # tt = len(timesteps)-1
-    
     kk = 0;
     tt = 0;
     hln1 = axs[kk,tt].plot(s_env_vals,frac_ccn_partmc_mean,color='k',linewidth=2.,linestyle='--',label='PartMC-MOSAIC')
     hln2 = axs[kk,tt].plot(s_env_vals,frac_ccn_mam4,color='C0',linewidth=2.,label='MAM4')
-    # axs[kk,tt].set_xlim([100.,1000.])
     
     axs[kk,tt].legend(loc='lower left',frameon=False,bbox_to_anchor=(axs[kk,tt].get_xlim()[0],0.4*axs[kk,tt].get_ylim()[1]),ncol=2)
     hln1[0].remove()
     hln2[0].remove()
-    
-    # axs[kk,tt].legend(loc='lower left',frameon=False,bbox_to_anchor=(axs[kk,tt].get_xlim()[-1],axs[kk,tt].get_ylim()[-1]*1.5))
-    # for ii in range(axs.shape[0]):
-    #     axs[ii,-1].axis('off')
-    #     axs[ii,-1].axis('off')
     
     for ii in range(axs.shape[0]):
         if ii>0:
@@ -868,6 +828,23 @@ def box_model_fccn__few(
     for ii in range(axs.shape[1]):
         axs[0,ii].axis('off')
         axs[0,ii].axis('off')
+    
+    if add_lab:
+        for kk in range(axs.shape[0]):
+            if kk>0:
+                if left:
+                    xlim_vals = axs[kk,0].get_xlim()
+                    ylim_vals = axs[kk,0].get_ylim()
+                    x_text = 10.**(np.log10(xlim_vals[0])-0.3*(np.log10(xlim_vals[-1])-np.log10(xlim_vals[0])))
+                    y_text = (ylim_vals[1] - ylim_vals[0])*0.85 + ylim_vals[0]
+                    axs[kk,0].text(x_text,y_text,'(' + ascii_lowercase[kk-1] + ')')
+                else:
+                    xlim_vals = axs[kk,-1].get_xlim()
+                    ylim_vals = axs[kk,-1].get_ylim()
+                    x_text = 10.**(np.log10(xlim_vals[-1])+0.1*(np.log10(xlim_vals[-1])-np.log10(xlim_vals[0])))
+                    y_text = (ylim_vals[1] - ylim_vals[0])*0.85 + ylim_vals[0]
+                    axs[kk,-1].text(x_text,y_text,'(' + ascii_lowercase[kk-1] + ')')
+    
     if save_fig:
         save_dir = get_save_dir(ensemble_dir)
         fig.savefig(save_dir + 'frac_ccn_few.pdf',dpi=dpi,bbox_inches='tight')
@@ -955,22 +932,15 @@ def KL_vs_aging(
         midpoints_integratedSA[idx] = mid_point
         num_in_SA_bin[ii] = len(idx)
         
-    # fig = plt.figure()
     fig,axs = plt.subplots(1,2,sharey=True)
     fig.set_size_inches(fig_width,fig_height)
     
     data = np.array([bins_integratedNtot,bins_integratedSA,np.log10(midpoints_integratedNtot),np.log10(midpoints_integratedSA),KL_cond,KL_coag]).transpose()
     df = pandas.DataFrame(data=data,columns=['bins_integratedNtot','bins_integratedSA','midpoints_integratedNtot','midpoints_integratedSA','KL_cond','KL_coag'])
-    #fig,ax = plt.subplots(1)
-    # ax = fig.add_subplot(1,2,1); 
-    # ax.set_xscale('log')
     sns.boxplot(data=df,x='bins_integratedNtot',y='KL_coag',color='C0',ax=axs[0], showfliers=showfliers, whis=whis)
-    # sns.boxplot(data=df,x='midpoints_integratedNtot',y='KL_coag',color='C0')
-    # Ntot_lims = [3,axs[0].get_xlim()[1]]
     Ntot_lims = axs[0].get_xlim()
     Ntot_ticklabs = np.logspace(3,9,7)
     Ntot_ticks = get_ticks(bins_integratedNtot[~np.isnan(bins_integratedNtot)]-min(bins_integratedNtot[~np.isnan(bins_integratedNtot)]),midpoints_integratedNtot[~np.isnan(bins_integratedNtot)],Ntot_ticklabs,scale='log')
-    # Ntot_ticks = get_ticks(midpoints_integratedNtot[~np.isnan(bins_integratedNtot)],midpoints_integratedNtot[~np.isnan(bins_integratedNtot)],Ntot_ticklabs,scale='log')
     
     Ntot_ticks_text = []
     for tick in Ntot_ticklabs:
@@ -1087,21 +1057,16 @@ def s_thresh_vs_aging(
         midpoints_integratedSA[idx] = mid_point
         num_in_SA_bin[ii] = len(idx)
         
-    # fig = plt.figure()
     fig,axs = plt.subplots(1,2,sharey=True)
     fig.set_size_inches(fig_width,fig_height)
     
-    # data = np.array([bins_integratedNtot,bins_integratedSA,np.log10(midpoints_integratedNtot),np.log10(midpoints_integratedSA),s_onset_ratio_cond,s_onset_ratio_coag]).transpose()
-    # df = pandas.DataFrame(data=data,columns=['bins_integratedNtot','bins_integratedSA','midpoints_integratedNtot','midpoints_integratedSA','s_onset_ratio_cond','s_onset_ratio_coag'])
-
     data = np.array([bins_integratedNtot,bins_integratedSA,np.log10(midpoints_integratedNtot),np.log10(midpoints_integratedSA),s_onset_ratio_cond,s_onset_ratio_coag]).transpose()
     df = pandas.DataFrame(data=data,columns=['bins_integratedNtot','bins_integratedSA','midpoints_integratedNtot','midpoints_integratedSA','s_onset_ratio_cond','s_onset_ratio_coag'])    
     sns.boxplot(data=df,x='bins_integratedNtot',y='s_onset_ratio_coag',color='C0',ax=axs[0], showfliers=showfliers, whis=whis)
-    # sns.boxplot(data=df,x='midpoints_integratedNtot',y='KL_coag',color='C0')
+    
     Ntot_lims = axs[0].get_xlim()
     Ntot_ticklabs = np.logspace(3,9,7)
     Ntot_ticks = get_ticks(bins_integratedNtot[~np.isnan(bins_integratedNtot)]-min(bins_integratedNtot[~np.isnan(bins_integratedNtot)]),midpoints_integratedNtot[~np.isnan(bins_integratedNtot)],Ntot_ticklabs,scale='log')
-    # Ntot_ticks = get_ticks(midpoints_integratedNtot[~np.isnan(bins_integratedNtot)],midpoints_integratedNtot[~np.isnan(bins_integratedNtot)],Ntot_ticklabs,scale='log')
     
     Ntot_ticks_text = []
     for tick in Ntot_ticklabs:
@@ -1115,16 +1080,8 @@ def s_thresh_vs_aging(
     axs[0].set_xlabel('integrated number \n concentration [cm$^{-3}$h]',fontdict={'size':12})
     axs[0].set_ylabel('$s_{\mathrm{' + str(int(thresh*100)) + ',MAM4}}/s_{\mathrm{' + str(int(thresh*100)) + ',PartMC-MOSAIC}}$',fontdict={'size':12})
     
-    # if save_fig:
-    #     save_dir = get_save_dir(ensemble_dir__cond)
-    #     fig.savefig(save_dir + 'KL_aging_coag.pdf',dpi=500,bbox_inches='tight')
-
-    
-    # fig2,ax2 = plt.subplots(1)
-    # plt.sca(axs[1])#fig.add_subplot(1,2,2)
     sns.boxplot(data=df,x='bins_integratedSA',y='s_onset_ratio_cond',color='C0',ax=axs[1],showfliers=showfliers)
     SA_lims = axs[1].get_xlim()
-    # SA_ticklabs = np.logspace(-2,1,4)
     SA_ticklabs = np.logspace(-3,2,6)
     SA_ticks = get_ticks(bins_integratedSA[~np.isnan(bins_integratedSA)]-min(bins_integratedSA[~np.isnan(bins_integratedSA)]),midpoints_integratedSA[~np.isnan(bins_integratedSA)],SA_ticklabs,scale='log')
     SA_ticks_text = []
@@ -1212,17 +1169,17 @@ def KL_vs_time__few(
         fig,ax = plt.subplots(nrows=1,ncols=1,sharex=True)
     
         if unit == 'min':
-            for ss in scenario_nums:#range(KL.shape[1]):
+            for ss in scenario_nums:
                 ax.errorbar(time_seconds/60.,np.mean(KL[:,ss,:,pp],axis=1),yerr=np.std(KL[:,ss,:,pp],axis=1),label=process,linewidth=3.)
             ax.set_xlim([min(time_seconds/60.),max(time_seconds/60.)])
             ax.set_xlabel('time [min]')
         elif unit == 'h':
-            for ss in scenario_nums:#range(KL.shape[1]):
+            for ss in scenario_nums:
                 ax.errorbar(time_seconds/3600.,np.mean(KL[:,ss,:,pp],axis=1),yerr=np.std(KL[:,ss,:,pp],axis=1),label=process,linewidth=3.)
             ax.set_xlim([min(time_seconds/3600.),max(time_seconds/3600.)])
             ax.set_xlabel('time [h]')
         else:
-            for ss in scenario_nums:#range(KL.shape[1]):
+            for ss in scenario_nums:
                 ax.errorbar(time_seconds,np.mean(KL[:,ss,:,pp],axis=1),yerr=np.std(KL[:,ss,:,pp],axis=1),label=process,linewidth=3.)
             ax.set_xlim([min(time_seconds),max(time_seconds)])
             ax.set_xlabel('time [s]')
@@ -1239,22 +1196,22 @@ def KL_vs_time__few(
         
         for pp in range(len(processes)):
             if unit == 'min':
-                for s_idx,ss in enumerate(scenario_nums):#range(KL.shape[1]):
+                for s_idx,ss in enumerate(scenario_nums):
                     axs[s_idx].errorbar(time_seconds/60.,np.mean(KL[:,ss,:,pp],axis=1),yerr=np.std(KL[:,ss,:,pp],axis=1),label=process,linewidth=3.)
                 axs[s_idx].set_xlim([min(time_seconds/60.),max(time_seconds/60.)])
                 axs[s_idx].set_xlabel('time [min]')
             elif unit == 'h':
-                for s_idx,ss in enumerate(scenario_nums):#range(KL.shape[1]):
+                for s_idx,ss in enumerate(scenario_nums):
                     axs[s_idx].errorbar(time_seconds/3600.,np.mean(KL[:,ss,:,pp],axis=1),yerr=np.std(KL[:,ss,:,pp],axis=1),label=process,linewidth=3.)
                 axs[s_idx].set_xlim([min(time_seconds/3600.),max(time_seconds/3600.)])
                 axs[s_idx].set_xlabel('time [h]')
             else:
-                for s_idx,ss in enumerate(scenario_nums):#range(KL.shape[1]):
+                for s_idx,ss in enumerate(scenario_nums):
                     axs[s_idx].errorbar(time_seconds,np.mean(KL[:,ss,:,pp],axis=1),yerr=np.std(KL[:,ss,:,pp],axis=1),label=process,linewidth=3.)
                 axs[s_idx].set_xlim([min(time_seconds),max(time_seconds)])
                 axs[s_idx].set_xlabel('time [s]')
 
-            for s_idx,ss in enumerate(scenario_nums):#range(KL.shape[1]):            
+            for s_idx,ss in enumerate(scenario_nums):
                 axs[s_idx].set_xticklabels([int(xtick) for xtick in axs[s_idx].get_xticks()],fontsize=12)
                 axs[s_idx].set_yticklabels(np.round(axs[s_idx].get_yticks(),decimals=1),fontsize=12)
             if tt == len(timesteps):
@@ -1264,8 +1221,7 @@ def KL_vs_time__few(
         save_dir = get_save_dir(ensemble_dir)
         if save_fig:
             fig.savefig(save_dir + 'KL_vs_time__few_allProcesses.pdf', dpi=dpi)
-    # plt.legend()
-    # fig.show()
+            
     
     
 def KL_vs_time__withProcesses_few(
@@ -1378,10 +1334,6 @@ def D50_vs_time__withProcesses(
     sigs = np.zeros([len(timesteps),n_scenarios,len(processes),4])
     KL = np.zeros([len(timesteps),n_scenarios,len(processes)])
     KL_std = np.zeros([len(timesteps),n_scenarios,len(processes)])
-    # for (process,lab) in zip(processes,labs):
-    #     
-        # dNdlnD_mam4 = np.zeros([len(timesteps),len(lnDs),n_scenarios,len(processes)])
-        # dNdlnD_partmc = np.zeros([len(timesteps),len(lnDs),n_scenarios,len(processes)])
     for pp,(process,lab) in enumerate(zip(processes,labs)):
         ensemble_dir = ensemble_over_dir + ensemble_prefix + '_' + lab + '_' + process + '/'
         for tt,timestep in enumerate(timesteps):
@@ -1392,7 +1344,6 @@ def D50_vs_time__withProcesses(
             print('pp',pp,tt_dir)
             dNdlnD_mam4[tt,pp,:,:] = np.loadtxt(tt_dir + 'dNdlnD_mam4.txt')
             dNdlnD_partmc_repeats = np.zeros([n_scenarios,len(lnDs),n_repeat])
-            # KL_repeats = np.zeros([n_scenarios,n_repeat])
             for ii in range(n_repeat):
                 dNdlnD_partmc_repeats[:,:,ii] = np.loadtxt(tt_dir + 'dNdlnD_partmc_repeat' + str(ii + 1).zfill(4) + '.txt')
             dNdlnD_partmc[tt,pp,:,:] = np.mean(dNdlnD_partmc_repeats,axis=2)
@@ -1400,33 +1351,11 @@ def D50_vs_time__withProcesses(
             
             KL_repeats = np.loadtxt(tt_dir + 'KL_repeats_backward.txt')
             KL[tt,:,pp] = np.mean(KL_repeats,axis=1)
-            # KL_std[tt,:,pp] = np.std(KL_repeats,axis=1)
             for ss in range(n_scenarios):
-                # KL[tt,ss,pp] = analyses.get_KL_binned(dNdlnD_partmc[tt,pp,ss,:],dNdlnD_mam4[tt,pp,ss,:],backward=backward)
                 D50_partmc[tt,pp,ss] = np.interp(0.5,np.cumsum(dNdlnD_partmc[tt,pp,ss,:])/np.sum(dNdlnD_partmc[tt,pp,ss,:]),np.exp(lnDs))
                 D50_mam4[tt,pp,ss] = np.interp(0.5,np.cumsum(dNdlnD_mam4[tt,pp,ss,:])/np.sum(dNdlnD_mam4[tt,pp,ss,:]),np.exp(lnDs))
                 s50_partmc[tt,pp,ss] = np.interp(0.5,frac_ccn_partmc[tt,pp,ss,:],s_env_vals)
                 s50_mam4[tt,pp,ss] = np.interp(0.5,frac_ccn_mam4[tt,pp,ss,:],s_env_vals)
-                # D50_partmc[tt,pp,ss] = np.exp(np.interp(0.5,np.cumsum(dNdlnD_partmc[tt,pp,ss,:])/np.sum(dNdlnD_partmc[tt,pp,ss,:]),lnDs))
-                # D50_mam4[tt,pp,ss] = np.exp(np.interp(0.5,np.cumsum(dNdlnD_mam4[tt,pp,ss,:])/np.sum(dNdlnD_mam4[tt,pp,ss,:]),lnDs))
-                # s50_partmc[tt,pp,ss] = np.exp(np.interp(0.5,frac_ccn_partmc[tt,pp,ss,:],np.log(s_env_vals)))
-                # s50_mam4[tt,pp,ss] = np.exp(np.interp(0.5,frac_ccn_mam4[tt,pp,ss,:],np.log(s_env_vals)))
-            #     for ss in range(n_scenarios):
-            #         KL_recomputed[tt,ss,ii,pp] = analyses.get_KL_binned(dNdlnD_partmc[ss,:],dNdlnD_mam4[ss,:],backward=backward)
-            # if recompute_KL:
-            #     dNdlnD_mam4 = np.loadtxt(tt_dir + 'dNdlnD_mam4.txt')
-            #     for ii in range(n_repeat):
-            #         dNdlnD_partmc = np.loadtxt(tt_dir + 'dNdlnD_partmc_repeat' + str(ii + 1).zfill(4) + '.txt')
-            #         for ss in range(n_scenarios):
-            #             KL[tt,ss,ii,pp] = analyses.get_KL_binned(dNdlnD_partmc[ss,:],dNdlnD_mam4[ss,:],backward=backward)
-            # else:
-            #     if backward:
-            #         KL[tt,:,:,pp] = np.loadtxt(tt_dir + 'KL_repeats_backward.txt')
-            #     else:
-            #         KL[tt,:,:,pp] = np.loadtxt(tt_dir + 'KL_repeats.txt')
-    # fig, ax = plt.subplots()
-    # fig.subplots_adjust(right=0.75)
-    # twin1 = ax.twinx()
     
     dtime = 60./60.
     ts = timesteps*dtime
@@ -1444,10 +1373,7 @@ def D50_vs_time__withProcesses(
         axs[0].set(xlim=(min(ts),max(ts)), xlabel="time [s]", ylabel="median diameter")#,yscale='log')
         axs[1].set(xlim=(min(ts),max(ts)), xlabel="time [s]", ylabel="supersaturation at which\nhalf activate [%]")#,yscale='log')
         plt.show()
-        
-    # plt.plot(timesteps,,color='C0',linestyle='--');  plt.plot(timesteps,,color='C0',linestyle='--');
     
-    # dtime = 60.
     ts = timesteps*dtime
     
     for ss in range(100):
@@ -1457,10 +1383,6 @@ def D50_vs_time__withProcesses(
         
         p1, = ax1.plot(ts,KL[:,ss,0],color='C2',label='KL-divergence')
         p2, = ax2.plot(ts,s50_mam4[:,0,ss]/s50_partmc[:,0,ss],color='C4',label='$s_{50}$')
-        
-        
-        # p2a, = ax2.plot(ts,s50_partmc[:,0,ss],color='C4',linestyle='--', label='PartMC-MOSAIC')
-        # p2b, = ax2.plot(ts,s50_mam4[:,0,ss],color='C4', label='MAM4')
         
         ax1.yaxis.label.set_color(p1.get_color())
         ax2.yaxis.label.set_color(p2.get_color())
@@ -1472,50 +1394,19 @@ def D50_vs_time__withProcesses(
         ax2.tick_params(axis='y', labelcolor=p2.get_color())
         plt.show()
     
-    
-    # fig.set_size_inches(4.5,3.5)
-    
-    # ax.set_yscale('log')
-    # twin1.set_yscale('log')
-    # ax.set_xlim([min(ts),max(ts)])
-    
-    # for ss in range(KL.shape[1]):
-    #     fig,axs = plt.subplots(nrows=1,ncols=len(labs),sharex=True)
-    #     for pp,process in enumerate(processes):
-    #         axs.errorbar(timesteps,np.mean(KL[:,ss,:,pp],axis=1),yerr=np.std(KL[:,ss,:,pp],axis=1),label=process)
-            
-    #     axs.legend()
-    #     fig.show()
+
 def scatter_s50_vs_KL(
         ensemble_dir,timesteps,dtime,backward=False,recompute_KL=True,
         ensemble_over_dir = '/Users/fier887/Downloads/box_simulations3/',
         save_fig=True,dpi=500,mode_sigs=np.log([1.8,1.6,1.8,1.6])):
     df = make_dataframe(
         ensemble_dir,timesteps,recompute_KL=recompute_KL,backward=backward)
-
-    # fig,ax1 = plt.subplots(1,1)
-    # col1 = 'C2'
-    # col2 = 'C4'
-    # ax1.scatter(df['KL_backward'],df['s_onset_ratio_50'],color=col1)
-    # ax2 = ax1.twinx()
-    # ax2.scatter(df['KL_backward'],df['s_onset_ratio_99'],color=col2)
-    # # ax1.xlim([0.,max(df['KL_backward'])])
-    # # ax1.ylim([0.,ax2.get_ylim()])
-    
-    # ax1.yaxis.label.set_color(col1)
-    # ax2.yaxis.label.set_color(col2)
-    
-    # ax1.set(xlim=(0.,max(df['KL_backward'])), xscale='log', xlabel="KL-divergence", ylabel="$s_{50,\mathrm{MAM4}}/s_{50,\mathrm{PartMC-MOSAIC}}$")#,yscale='log')
-    # ax2.set(xlim=(0.,max(df['KL_backward'])), xscale='log', xlabel="KL-divergence", ylabel="$s_{99,\mathrm{MAM4}}/s_{99,\mathrm{PartMC-MOSAIC}}$")#),yscale='log')
-    
-    # ax1.tick_params(axis='y', labelcolor=col1)
-    # ax2.tick_params(axis='y', labelcolor=col2)
     
     fig,ax = plt.subplots(1,1)
     ax.scatter(df['KL_backward'],df['s_onset_ratio_01'],label='$s_{1\%,\mathrm{MAM4}}/s_{1\%,\mathrm{PartMC-MOSAIC}}$')
     ax.scatter(df['KL_backward'],df['s_onset_ratio_50'],label='$s_{50\%,\mathrm{MAM4}}/s_{50\%,\mathrm{PartMC-MOSAIC}}$')
     ax.scatter(df['KL_backward'],df['s_onset_ratio_99'],label='$s_{99\%,\mathrm{MAM4}}/s_{99%,\mathrm{PartMC-MOSAIC}}$')
-    # plt.xlim([0.,ax.get_xlim()[1]])
+    
     ax.set_xscale('log')
     ax.set_xlim([min(df['KL_backward']),max(df['KL_backward'])])
     ax.set_xlabel('KL-divergence',fontsize=12)
@@ -1534,29 +1425,11 @@ def scatter_sThresh_contributions(
         ensemble_dir,timesteps,recompute_KL=recompute_KL,backward=backward)
     df_cond = make_dataframe(
         ensemble_dir_cond,timesteps,recompute_KL=recompute_KL,backward=backward)
-    # fig,ax1 = plt.subplots(1,1)
-    # col1 = 'C2'
-    # col2 = 'C4'
-    # ax1.scatter(df['KL_backward'],df['s_onset_ratio_50'],color=col1)
-    # ax2 = ax1.twinx()
-    # ax2.scatter(df['KL_backward'],df['s_onset_ratio_99'],color=col2)
-    # # ax1.xlim([0.,max(df['KL_backward'])])
-    # # ax1.ylim([0.,ax2.get_ylim()])
-    
-    # ax1.yaxis.label.set_color(col1)
-    # ax2.yaxis.label.set_color(col2)
-    
-    # ax1.set(xlim=(0.,max(df['KL_backward'])), xscale='log', xlabel="KL-divergence", ylabel="$s_{50,\mathrm{MAM4}}/s_{50,\mathrm{PartMC-MOSAIC}}$")#,yscale='log')
-    # ax2.set(xlim=(0.,max(df['KL_backward'])), xscale='log', xlabel="KL-divergence", ylabel="$s_{99,\mathrm{MAM4}}/s_{99,\mathrm{PartMC-MOSAIC}}$")#),yscale='log')
-    
-    # ax1.tick_params(axis='y', labelcolor=col1)
-    # ax2.tick_params(axis='y', labelcolor=col2)
     
     fig,ax = plt.subplots(1,1)
     ax.scatter(df['KL_backward'],df_cond['s_onset_ratio_01']/df['s_onset_ratio_01'],label='$s_{1\%,\mathrm{MAM4}}/s_{1\%,\mathrm{PartMC-MOSAIC}}$')
     ax.scatter(df['KL_backward'],df_cond['s_onset_ratio_50']/df['s_onset_ratio_50'],label='$s_{50\%,\mathrm{MAM4}}/s_{50\%,\mathrm{PartMC-MOSAIC}}$')
     ax.scatter(df['KL_backward'],df_cond['s_onset_ratio_99']/df['s_onset_ratio_99'],label='$s_{99\%,\mathrm{MAM4}}/s_{99%,\mathrm{PartMC-MOSAIC}}$')
-    # plt.xlim([0.,ax.get_xlim()[1]])
     ax.set_xscale('log')
     ax.set_xlim([min(df['KL_backward']),max(df['KL_backward'])])
     ax.set_xlabel('KL-divergence',fontsize=12)
@@ -1564,7 +1437,7 @@ def scatter_sThresh_contributions(
     ax.hlines([1.],ax.get_xlim()[0],ax.get_xlim()[1],'k',linewidth=0.5)
     ax.legend(loc="best")
     save_dir = get_save_dir(ensemble_dir)
-    # fig.savefig(save_dir + 's_ratio__vs__KL.pdf',dpi=dpi,bbox_inches='tight')
+    
     
 def scatter_aging_conditions(
         ensemble_prefix,timesteps,dtime,backward=False,recompute_KL=True,
@@ -1605,11 +1478,6 @@ def scatter_aging_conditions(
         num_conc_mam4[tt,:] = analyses.read_boxmodel_data('N_tot',tt_dir,timestep*dtime,mode_sigs=mode_sigs,recompute_KL = recompute_KL, n_repeat=n_repeat) # np.loadtxt(tt_dir + 'num_conc_mam4.txt')
     
     fig,ax = plt.subplots(1)    
-    # df = pandas.DataFrame(data=np.array([1e9*3600.*np.mean(np.mean(sa_flux,axis=2),axis=0),np.mean(np.mean(num_conc,axis=2),axis=0)*1e-6]).transpose(),columns=['sa_flux','num_conc'])
-    # df = pandas.DataFrame(data=np.array([1e9*3600.*np.mean(np.mean(sa_flux,axis=2),axis=0),np.mean(np.mean(num_conc,axis=2),axis=0)*1e-6]).transpose(),columns=['sa_flux','num_conc'])
-    # g = sns.JointGrid(height=3,ratio=4,data=df,x='sa_flux',y='num_conc')
-    # g.set(fontsize=16,xscale='log',yscale='log')
-    # plt.scatter(np.mean(1e9*3600.*sa_flux_mam4,axis=0),np.mean(1e-6*num_conc_mam4,axis=0),s=50,c='k')
     plt.scatter(np.mean(1e9*3600.*np.mean(sa_flux,axis=2),axis=0),np.mean(1e-6*np.mean(num_conc,axis=2),axis=0),s=50,c='k')
     plt.xscale('log')
     plt.yscale('log')
@@ -1619,14 +1487,7 @@ def scatter_aging_conditions(
     plt.ylabel('number concentration [cm$^{-3}$]',fontdict={'size':12})
     if save_fig:
         save_dir = get_save_dir(ensemble_dir)
-        # fig.savefig('/Users/fier887/Downloads/aging_conditions.pdf',dpi=dpi,bbox_inches='tight')
         fig.savefig(save_dir + 'aging_conditions.pdf',dpi=dpi,bbox_inches='tight')
-        
-    # g.set_axis_labels(['condensational growth rate [nm h$^{-1}$]','number concentration [cm$^{-3}$]'])    
-    # g.plot(sns.scatterplot, sns.histplot)
-    # g.plot(sns.scatterplot, sns.kdeplot)
-    
-    #sns.JointGrid(x='condesational growth rate [nm/h]',y='number concentration [cm$^{-3}$]')
     
         
 def KL_regimes(
@@ -1720,7 +1581,6 @@ def s_onset_regimes(
     elif units == 'min':
         ax.set_xlabel('time [min]',fontdict={'size':12})
     
-    # ax.set_ylabel('$s_{' + str(int(thresh*100)) + '}$',fontdict={'size':12})
     ax.set_ylabel('$s_{\mathrm{' + str(int(thresh*100)) + ',MAM4}}/s_{\mathrm{' + str(int(thresh*100)) + ',PartMC-MOSAIC}}$',fontdict={'size':12})
     
     
@@ -1730,7 +1590,6 @@ def s_onset_regimes(
         save_dir = get_save_dir(ensemble_dir)
         fig.savefig(save_dir + 's' + str(thresh*100) + '_regimes.pdf',dpi=500,bbox_inches='tight')
     
-# make this more general! send in varnames. 
 def make_dataframe(
         ensemble_dir,timesteps,Ds = [], recompute_KL=True,backward=False,
         mode_sigs = np.log([1.8,1.6,1.8,1.6]), regime_type='process_extremes',avg_scale='lin'):    
@@ -1739,7 +1598,6 @@ def make_dataframe(
     
     ensemble_dir_cond = ensemble_dir[:-7] + 'b_cond/'
     ensemble_dir_coag = ensemble_dir[:-7] + 'c_coag/'
-    # ensemble_dir_cond = ensemble_dir[:-7] + 'c_coag/'
     ensemble_settings = pickle.load(open(ensemble_dir + 'ensemble_settings.pkl','rb'))
     dtime = ensemble_settings[0]['spec']['t_output']
     
@@ -2314,10 +2172,6 @@ def error_emulator(
     # Xvarnames = ['N0norm_1','N0norm_2','N0norm_3','N0norm_4','dNnorm_1','dNnorm_2','dNnorm_3','dNnorm_4','dD_1','dD_2','dD_3','dD_4']
     
     X_train,X_test,y_test,y_train = analyses.get_Xy_process(Xvarnames,yvarname,ensemble_dir,timesteps)
-    # X_train.replace([np.inf, -np.inf], np.nan, inplace=True)
-    
-    # regr = analyses.train_surrogate_model(X_train,y_train,regressor='mlp',solver='lbfgs',max_iter=5000)
-    # regr = analyses.train_surrogate_model(X_train,y_train,regressor='mlp',solver='sgd',max_iter=5000)
     fig,ax = plt.subplots(1)
     if yscale == 'log':
         regr = analyses.train_surrogate_model(X_train,np.log10(y_train),regressor=regressor,solver=solver,max_iter=5000)
@@ -2349,10 +2203,6 @@ def error_emulator(
         plt.colorbar()
         plt.show()
     
-    # for ii in range(len(Xvarnames)):
-    #     print(ii,Xvarnames[ii])
-    #     print('min',np.min(X_e3sm_raveled[:,ii]))
-    #     print('max',np.max(X_e3sm_raveled[:,ii]))
     end1 = time.time()
     start2 = time.time()
     y_e3sm_raveled = regr.predict(X_e3sm_raveled)
@@ -2369,7 +2219,7 @@ def error_emulator(
         clims = [0.,c.get_clim()[1]]
     c.set_clim(clims) 
     cbar = fig.colorbar(c,ax=ax,label='KL-divergence after 30 min')
-    # plt.clabel('KL-divergence after 30~min')
+    
     if save:
         plt.savefig(fig_dir + 'errorEmulator_map_' + yscale + '.png')
 
@@ -2453,7 +2303,7 @@ def error_emulator_2regressions(
     
     c.set_clim(clims) 
     cbar = fig.colorbar(c,ax=ax,label='KL-divergence after 30 min')
-    # plt.clabel('KL-divergence after 30~min')
+    
     if save:
         plt.savefig(fig_dir + 'errorEmulator_map_' + yscale + '.png')
     return X_train,X_test,y_test,y_train,X_e3sm_raveled,y_e3sm_raveled,the_shape
@@ -2504,8 +2354,6 @@ def error_emulator_splitRepeats(
         fig.savefig(fig_dir + 'KLemulator_scatter.png')    
     plt.show()
     
-    # fig,ax = plt.subplots(1)
-    # start1 = time.time()
     e3sm_filename = '/Users/fier887/Downloads/PartMC_test_map_05.nc'
     f = Dataset(e3sm_filename)
     
@@ -2520,19 +2368,12 @@ def error_emulator_splitRepeats(
         plt.title(Xvarnames[ii])
         plt.colorbar(c)
         plt.show()
-        
-    # for ii in range(len(Xvarnames)):
-    #     print(ii,Xvarnames[ii])
-    #     print('min',np.min(X_e3sm_raveled[:,ii]))
-    #     print('max',np.max(X_e3sm_raveled[:,ii]))
-    # end1 = time.time()
-    # start2 = time.time()
+    
     idx, = np.where(~np.any(np.isinf(X_e3sm_raveled) | np.isnan(X_e3sm_raveled),axis=1))
     y_e3sm_raveled = np.ones_like(X_e3sm_raveled[:,0]) * np.nan
     y_e3sm_raveled[idx] = regr.predict(X_e3sm_raveled[idx,:])
     y_e3sm_gridded = analyses.unravel_y(y_e3sm_raveled,the_shape)
-    # end2 = time.time()
-    # print(end1-start1,end2-start2)
+    
     fig,ax = plt.subplots(1)
     if yscale == 'log':
         c = ax.pcolor(lon,lat,10.**y_e3sm_gridded)
@@ -2544,7 +2385,7 @@ def error_emulator_splitRepeats(
     
     c.set_clim(clims) 
     cbar = fig.colorbar(c,ax=ax,label='KL-divergence after 30 min')
-    # plt.clabel('KL-divergence after 30~min')
+    
     if save:
         plt.savefig(fig_dir + 'errorEmulator_map_' + yscale + '.png')
     return X_train,X_test,y_test,y_train,X_e3sm_raveled,y_e3sm_raveled,the_shape
@@ -2707,8 +2548,6 @@ def error_emulator_kfold(
         ensemble_dir,timesteps,n_splits=None,
         Xvarnames = ['logN0_1','logN0_2','logN0_3','logN0_4','dlogN_1','dlogN_2','dlogN_3','dlogN_4','mu0_1','mu0_2','mu0_3','mu0_4','dmu_1','dmu_2','dmu_3','dmu_4'],
         yvarname='KL',yscale='lin',regressor='mlp',solver='lbfgs',max_iter=5000,hidden_layer_sizes=(100,)):
-    # kf = KFold(n_splits=10)
-    
     
     Xy_folds = analyses.get_Xy_kfold(Xvarnames,yvarname,ensemble_dir,timesteps,n_splits=n_splits)
     MAE = []
@@ -2739,5 +2578,3 @@ def error_emulator_kfold(
             MAE.append(abs(y_test_predict - y_test))
             #R.append(np.corrcoef(y_test[idx2],y_test_predict))
     return MAE,all_ytest,all_ytest_predict
-    # X_train,X_test,y_test,y_train = analyses.get_Xy_process(Xvarnames,'KL',ensemble_dir,timesteps)
-

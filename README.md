@@ -11,7 +11,7 @@ This package also includes the input settings for the ensembles of PartMC-MOSAIC
 ## Box models
 This package was developed and tested with the following models:
   * Benchmark model: partmc-2.6.1 (https://github.com/compdyn/partmc) and mosaic-2012-01-25 (available from Rahul Zaveri)
-  * Reduced model: beta version of the Modal Aerosol Model box model (https://github.com/eagles-project/mam_refactor)
+  * Reduced model: beta version of the Modal Aerosol Model box model ([https://github.com/eagles-project/mam_refactor](https://github.com/kaizhangpnl/MAM_box_model))
 
 ## Python Dependencies
   * numpy
